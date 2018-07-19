@@ -1,0 +1,290 @@
+Whalesburg contracts audit
+==========================
+
+The audit is performed on May 31, 2018,
+version 2.0.**beta**.
+
+Scope
+=====
+
+This audit reviews contracts from the repository
+[Portfolio_SK] at commit
+`25ec4517af959d9df1c888cabf729a98c69a32a5` (master at the time of the review).
+
+The following files have been reviewed:
+
+1.  `contracts/WhalesburgSale.sol`,
+    sha3: `07cd2b189c10f81044d34e79b0481f6fce352c5a1ad953894a4c3cfb`
+
+2.  `contracts/WhalesBurgToken.sol`,
+    sha3: `197c6f13f4e2774f7c980c9c0478d392f3fa25df498a558c5f686b91`
+
+3.  `contracts/VestingConstructor.sol`,
+    sha3: `1fea4d27b067932301a89d51cb56879d45808256dc6cc6c496bd431a`
+
+4.  `contracts/Migrations.sol`,
+    sha3: `46f631a02de1426784e71202e7e277032cd7cb58dc0145327a545bf2`
+
+    The Migrations contract is a helper contract for truffle framework and is
+    not involved anyhow in the project's contracts.
+
+Overview
+========
+
+WhalesburgCrowdsale
+-------------------
+
+Introduced at WhalesburgSale.sol:56. Crowdsale contract performs the following
+actions:
+
+1.  Selling tokens for the ether (fallback function):
+    * 1 ether is worth 0.000'071'8 tokens,
+    * caller must be white-listed,
+    * total balance raised must not exceed hard cap 1421.64 ether (although
+      possible to exceed, see below),
+    * current time is within ICO time: Sunday, 03-Jun-18 16:00:00 UTC -
+      Tuesday, 03-Jul-18 16:00:00 UTC,
+    * sends received ether to the predefined wallet
+      (`0xCe66E79f59eafACaf4CaBaA317CaB4857487E3a1`),
+    * counts total number of buyers,
+    * every participant investment must not exceed individual cap calculated
+      as following.
+
+    Time from the start | Individual cap
+    ------------------- | --------------
+    First 2 hours       | 0.5 ether
+    Following 2 hours   | 2 ether
+    Following 20 hours  | 10 ether
+    Remaining time      | 1421.64 ether
+
+2.  Distributes tokens from the given wallet (function `distributionTokens`):
+    * initiated by the contract creator,
+    * only once in the life of the contract,
+    * the distribution sends token to the following addresses:
+
+    Receiver address                             | Token amount | Comment
+    -------------------------------------------- | ------------ | -------
+    `0x7B97BF2df716932aaED4DfF09806D97b70C165d6` |  3'500'000   | Bounty
+    `0xADc50Ae48B4D97a140eC0f037e85e7a0B13453C4` | 46'200'000   | Pre ICO
+    `0xCe66E79f59eafACaf4CaBaA317CaB4857487E3a1` | 20'500'000   | Developers
+    `0x253579153746cD2D09C89e73810E369ac6F16115` | 10'000'000   | Founders
+
+    Total is 80'200'000 tokens.
+
+    **Note** that the developers address can be updated by the contract
+    creator. Other addresses are hard-coded and cannot be changed.
+    
+    **Note** that the distribution fails if at the time of the distribution,
+    the wallet has no enough tokens. In this case, the distribution can be
+    tried again later.
+    
+3.  Adds or removes the candidates to or form the white list (functions
+    `authorize`, `addManyAuthorizeToWhitelist` and `revoke`):
+    * can be done only by the owner at his own discretion.
+    * fails if the specified candidate is already in the list.
+
+4.  Finalizes the crowdsale by burning the remaining tokens (function
+    `finalize`).
+    * Can be done only by the owner at his own discretion.
+    * Can be called only once.
+    * Can be called either after the ICO time passes of is hard Cap is reached.
+    * transfers the remaining token balance to the owner's account.
+
+5.  Updates the developers address for the initial token distribution
+    (function `setVestingAddress`).
+    * Can be called only by the owner.
+
+TokenVesting
+------------
+
+Introduced at VestingConstructor:109. It is a copy of [Open Zeppelin's
+TokenVesting] contract, except comments and formatting. It is a token holder
+contract that can release its token balance gradually like a typical vesting
+scheme, with a cliff and vesting period.
+
+
+[Open Zeppelin's TokenVesting]: https://github.com/OpenZeppelin/openzeppelin-solidity/blob/ad12381549c4c0711c2f3310e9fb1f65d51c299c/contracts/token/ERC20/TokenVesting.sol
+
+VestingCreator
+--------------
+
+Introduced in VestingConstructor.sol:196. The constructor is a factory of
+TokenVesting contracts (see above). It's only method `createVesting`:
+* can be called only by the owner of the contract,
+* creates new TokenVesting with the specified parameters (beneficiary, start
+  of the vesting, cliff, duration and revocable flag)
+* transfers specified amount of tokens from VestingCreator's account to the
+  created contract,
+* created contract is accessible through `vestingToken` public function.
+
+WhalesburgToken
+---------------
+
+Introduced in WhalesBurgToken.sol:180. Represents Standard burnable and
+pausable ERC20 token.
+* Initial supply is 100'000'000 tokens granted to the owner upon creation.
+
+SafeMath in WhalesburgSale.sol
+------------------------------
+
+Introduced at WhalesburgSale.sol:5 and is a library contract. The contract
+introduces additional checks for basic mathematical operations (`+`, `-`, `*`
+and `/`) preventing against the overflow errors. It is used in
+WhalesburgCrowdsale contract.
+
+The contract is a slightly modified version of [Open Zeppelin's SafeMath]
+contract.
+
+[Open Zeppelin's SafeMath]: https://github.com/OpenZeppelin/openzeppelin-solidity/blob/master/contracts/math/SafeMath.sol
+
+Ownable in WhalesburgSale.sol
+-----------------------------
+
+Introduced at WhalesburgSale.sol:40. Keeps track of the owner of the
+contract. The owner is an address who created the contract. Used in the
+WhalesburgCrowdsale contract.
+
+Unlike [Open Zeppelin's Ownable] contract, this one does not provide the
+ability to change the owner (which may be handy if the owner private key is
+compromised and needs to be replaced).
+
+[Open Zeppelin's Ownable]: https://github.com/OpenZeppelin/openzeppelin-solidity/blob/master/contracts/ownership/Ownable.sol
+
+Open Zeppelin Contracts
+-----------------------
+
+Following utility and ERC20 helper contracts are copies taken from [Open
+Zeppelin v1.9] contracts with minor modifications, formatting and comments
+changes:
+* SafeMath at VestingConstructor:80,
+* Ownable at VestingConstructor.sol:76,
+* ERC20Basic at VestingConstructor.sol:5,
+* ERC20 at VestingConstructor.sol:14,
+* SafeERC20 at VestingConstructor.sol:31,
+
+[Open Zeppelin v1.9]: https://github.com/OpenZeppelin/openzeppelin-solidity/tree/v1.9.0/contracts
+
+Errors
+======
+
+Not discovered.
+
+Warnings
+========
+
+Although not critical, following issues may cause inconveniences when working
+with contracts.
+
+1.  WhalesburgSale.sol:36 `transferFromICO`
+
+    The functions are not in [ERC20 standard]. Putting it to `ERC20` interface
+    makes the reader of the code think that any ERC20 compatible token will
+    work. This assumption would be false.
+
+2.  WhalesburgSale.sol:97 `event Authorized()`
+
+    The event is emitted after successful `authorize` function call, but not
+    after `addManyAuthorizeToWhitelist`. This means that automatic scanning of
+    the events may not reflect actual white listers. In addition to
+    `tokenHolders` array is not public, the actual white list may not be
+    recoverable.
+
+3.  WhalesburgSale.sol:167 `multisig.transfer(msg.value)`
+
+    [ERC20 standard] governs to check for function results. I recommend to use
+    `require()` here.
+
+Low severity warnings
+=====================
+
+Following are instances highlight minor issues that are likely to stay
+unnoticed.
+
+1.  WhalesburgSale.sol:134 `require(whitelist[_beneficiaries[i]] != true)`
+
+    If the `_beneficiaries` array contains any member who is already
+    white-listed, the whole function would throw (and the gas lost).
+
+2.  WhalesburgSale.sol:79 `uint256 public investors`
+
+    The public variable actually reflects buyers of the crowdsale. Actual
+    number of investors may be bigger considering initial distribution
+    beneficiaries or those who bought tokens without the crowdsale.    
+    
+3.  WhalesburgSale.sol:93 `address[] tokenHolders`
+
+    Arrays are expensive in smart contracts (in terms of gas
+    consumption). Moreover, it is only used for `investors` calculation and
+    not visible (public) itself. I recommend removing it and fixing
+    `investors` calculations (see above).    
+    
+4.  WhalesburgSale.sol:151 `weisRaised > hardCap`
+
+    If the current balance equals exactly the hard cap and the ICO time is not
+    up, it is not possible to either `finalize` or buy more tokens. I
+    recommend to use `>=` here.
+    
+5.  WhalesburgSale.sol:159 `function () isUnderHardCap public payable`
+
+    It is possible to excees the hard cap if the last payment exceeds it.
+
+6.  WhalesburgSale.sol:162 `now > startICO`
+    
+    Use `>=` here. If these lines are ever (in future updates) used from
+    constructor context, it will revert. Same above.
+ 
+7.  WhalesburgSale.sol:178 `now >= startICO.add(7200)`
+    WhalesburgSale.sol:182 `now >= startICO.add(14400)`
+    WhalesburgSale.sol:186 `now >= startICO.add(86400)`
+
+    Redundant condition checks (waste of gas) after `else`. Moreover, no need
+    to use SafeMath `.add` here.
+
+8.  WhalesburgSale.sol:196 `amount.mul(1e18).div(buyPrice)`
+
+    If `amount` is large enough, it will overflow and assert in `mul()`.  I
+    recommend storing `buyPrice` as a normalized value. Currently it is
+    71'800'000'000'000, then `buyPrice` could be just 718 and the
+    original expression could be `amount.mul(1e7).div(buyPrice)` saving precision.    
+    
+9.  VestingConstructor:128: `bool public revocable`
+
+    The variable only shows if the last created TokenVesting is
+    revocable. When the next TokenVesting is created, the variable is reset to
+    reflect its state. This information can be obtained from `vestingToken`
+    itself. So I was not sure if this variable is reasonable here, although
+    not harmful, of cause.
+
+10. WhalesBurgToken.sol:126 `uint256 constant public decimals`
+
+    [ERC20 standard] declares this variable should be `uint8`.
+
+Recommendations
+===============
+
+1.  WhalesburgSale.sol:163 `require(moneySpent[msg.sender] <= individualRoundCap)`
+
+    Investor sending money has a chance to see the transaction failed just
+    because he overused his individual cap at this time. This does not feel
+    nice to investor. Best practices here is to return excess money and
+    probably fire a warning event.
+    
+2.  Follow the [solidity style guide].
+    
+3.  Put constants aside of the code (`currentSaleLimit`). So they are more
+    visible and manageable. I recommend using `seconds` | `minutes` | `hours`
+    | `days` | `ether` specifiers to make constants clear and less
+    error-prone.
+
+4.  Mix of `uint` and `uint256` types. It is better to stick to either style.
+
+5.  Add and run tests. The bigger coverage the better.
+    
+Conclusion
+==========
+
+No critical or high severity issues were found. A number of recommendations
+were proposed to follow best practices and reduce potential attack surface.
+
+[ERC20 standard]: https://eips.ethereum.org/EIPS/eip-20
+[solidity style guide]: http://solidity.readthedocs.io/en/develop/style-guide.html
